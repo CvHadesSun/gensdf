@@ -1,0 +1,9 @@
+# TODO;
+1. sample sdf 
+2. impl data loader
+3. build framework
+4. sdf loss
+5. normal loss
+6. scale triplane feature??
+
+

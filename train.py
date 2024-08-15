@@ -14,9 +14,7 @@ from model import *
 
 
 def main():
-    
     train_dataset = init_dataset(specs["TrainData"], specs)
-
     # unsupervised methods require sampler; e.g. NeuralPull
     if specs["TrainData"] == "unlabeled":
         from dataloader.unlabeled_ds import Sampler
@@ -105,7 +103,6 @@ def main():
     trainer = pl.Trainer(accelerator='gpu', devices=1, precision=16, max_epochs=max_epochs, 
                         callbacks=callbacks)
     trainer.fit(model=model, ckpt_path=resume) 
-
 
 
 def init_model(model, specs, num_objects, dataloaders):
