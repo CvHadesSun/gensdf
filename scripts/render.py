@@ -30,6 +30,7 @@ from general_utils import sample_viewpoints
 import numpy as np
 import os
 from PIL import Image
+from tools import sample_mesh
 
 class VertexColorShader(ShaderBase):
     def forward(self, fragments, meshes, **kwargs) -> torch.Tensor:
@@ -193,6 +194,16 @@ class PyRender:
         light_locs = [[0.0, 0.0, -3.0] for _ in range(self.num_views)]
         self.lights = PointLights(device=self.device, location=light_locs).cuda()
 
+
+    def getAABB(self,verts):
+
+        min_ = torch.min(verts, dim=0).values
+        max_ = torch.max(verts, dim=0).values
+
+        aabb = torch.cat([min_,max_],dim=0).reshape(-1,3)
+
+        return aabb.cpu().numpy()
+
     def render_mesh(self,mesh_dir: str,out_dir: str)->None:
         mesh = trimesh.load(mesh_dir,device="cuda")
         vertices = torch.tensor(mesh.vertices, dtype=torch.float32)
@@ -201,9 +212,12 @@ class PyRender:
         textures = TexturesVertex(verts_features=torch.ones_like(vertices)[None])  # White color for all vertices
         mesh = Meshes(verts=[vertices], faces=[faces], textures=textures).cuda()
 
+        aabb = self.getAABB(vertices)
         self.color_render(mesh,out_dir)
         self.normal_render(vertices,faces,out_dir)
         self.save_cameras(out_dir)
+
+        np.save(f'{out_dir}/aabb.npy',aabb)
 
 
     def save_cameras(self,out_dir: str):
@@ -238,9 +252,12 @@ for i,obj in enumerate(mesh_dirs[:5]):
     os.makedirs(out_path,exist_ok=True)
     # 
     with open(f"{out_path}/mesh.txt",'w') as fp:
-        fp.write(obj)
+        fp.write(obj_dir)
         fp.close()
     # 
     rdr.render_mesh(obj_dir,out_path)
+    #
+    result = sample_mesh(obj_dir)
+    np.savez(f'{out_path}/samples.npz',**result)
 
     # break
