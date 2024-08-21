@@ -1,6 +1,6 @@
 name: "rings_103"
 subject: "000"
-experiment: "triplane_sdf"
+experiment: "triplane_sdf_tri_cat_xyz"
 
 dataroot: "/home/wanhu/workspace/gensdf/data/rings_test"
 
@@ -11,8 +11,9 @@ resume: true
 
 train:
   precision: 32
-  max_epochs: 3_000
-  check_val_every_n_epoch: 10
+  max_epochs: 10_000
+  check_val_every_n_epoch: 1_000
+  
 
 checkpoint:
   save_top_k: 1
@@ -23,7 +24,7 @@ dataset:
   opt:
     dataroot: ${dataroot}
     subject: ${subject}
-    num_sample: 50_000
+    num_sample: 500_000
 
     train_num_workers: 8
     val_num_workers: 0
@@ -34,6 +35,9 @@ model:
   _target_: model.triplane_net.model.TriplaneSDF
   opt:
     # AABB: [-1,-1,-1]
+    train_sdf: true
+    res: 512
+    num_samples: 1000_000  # batch val pts number.
     # triplane
     triplane:
       resolution: 256
@@ -42,14 +46,16 @@ model:
     mlp_filters: [135,128,64,32,16,1]
     # 
     loss_fn: "l1" # "mse"
-    last_op: "relu" # "sigmoid"
+    last_op: "tanh" # "sigmoid"  "tanh"
     lr_feature_init: 0.001
-    feature_lr_step: 100
-    feature_lr_gamma: 0.01
+    feature_lr_step: 80_000
+    feature_lr_gamma: 0.1
 
-    lr_decoder_init: 0.001
-    decoder_lr_step: 100
-    decoder_lr_gamma: 0.01
+    lr_decoder_init: 5e-4
+    decoder_lr_step: 80_000
+    decoder_lr_gamma: 0.1
+
+    save_epochs: [2_000,5_000,9_999]
 
 
 hydra:

@@ -7,7 +7,12 @@ import plyfile
 import skimage.measure
 import time
 import torch
-
+import torchcumesh2sdf
+import trimesh
+import mcubes
+import diso
+import mesh2sdf
+import skimage.measure
 
 # N: resolution of grid; 256 is typically sufficient 
 # max batch: as large as GPU memory will allow
@@ -138,3 +143,66 @@ def convert_sdf_samples_to_ply(
     ply_data.write(ply_filename_out)
 
 
+
+
+def load_and_precess(mesh_dir,band):
+    mesh = trimesh.load(mesh_dir, process=False, force='mesh', skip_materials=True)
+
+    tris = np.array(mesh.triangles, dtype=np.float32, subok=False)
+    # tris[..., [1, 2]] = tris[..., [2, 1]]
+    tris = tris - tris.min(0).min(0)
+    tris = (tris / tris.max() + band) / (1 + band * 2)
+    return torch.tensor(tris, dtype=torch.float32, device='cuda:0')
+
+
+def get_watertight_mesh(mesh_dir,res,out_dir,batch_size=10_000):
+    band = 8/res
+    tris = load_and_precess(mesh_dir,band)
+    sdf = torchcumesh2sdf.get_sdf(tris, res, band, batch_size)
+    # v, t = diso.DiffMC().cuda().forward(sdf) # todo: how to smooth?
+    v, f, _, _ = skimage.measure.marching_cubes(sdf.cpu().numpy(), 2/res)
+    # v,f = mcubes.marching_cubes(sdf.cpu().numpy(), 2/res)
+    # to [0,1]
+    v_01 = v/res
+    # to (-1,1)
+    new_v = (v_01 *2 - 1.0)*0.9
+    mcubes.export_obj(new_v, f, out_dir)
+
+
+def get_watertight_mesh_cpu(mesh_dir,res,out_dir,mesh_scale=0.8):
+
+    mesh = trimesh.load(mesh_dir, process=False, force='mesh', skip_materials=True)
+    vertices = mesh.vertices
+    bbmin = vertices.min(0)
+    bbmax = vertices.max(0)
+    center = (bbmin + bbmax) * 0.5
+    scale = 2.0 * mesh_scale / (bbmax - bbmin).max()
+    vertices = (vertices - center) * scale
+    sdf, mesh = mesh2sdf.compute(
+        vertices, mesh.faces, res, fix=True, level=2/res, return_mesh=True)
+    
+    mesh.vertices = mesh.vertices / scale + center
+    # mesh.export(out_dir)
+
+
+def post_processing(mesh_dir,size,out_dir):
+
+    mesh = mesh = trimesh.load(mesh_dir, process=False, force='mesh', skip_materials=True)
+
+    # keep the max component of the extracted mesh
+    components = mesh.split(only_watertight=False)
+    bbox = []
+    for c in components:
+        bbmin = c.vertices.min(0)
+        bbmax = c.vertices.max(0)
+        bbox.append((bbmax - bbmin).max())
+    max_component = np.argmax(bbox)
+    mesh = components[max_component]
+    mesh.vertices = mesh.vertices * (2.0 / size) - 1.0  # normalize it to [-1, 1]
+    mesh.export(out_dir)
+
+    # return mesh
+
+    # re-compute sdf
+    # sdf = mesh2sdf.core.compute(mesh.vertices, mesh.faces, size)
+    # return (sdf, mesh) if return_mesh else sdf

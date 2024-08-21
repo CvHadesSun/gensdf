@@ -3,6 +3,7 @@ import numpy as np
 from torch import nn
 import os
 import torch.nn.functional as F
+from torch.nn import init
 
 
 class Embedder:
@@ -65,17 +66,19 @@ class TriplaneFeatureNet(nn.Module):
         self.feature_dim = feature_dim
 
         self.triplane = nn.Parameter(torch.zeros(3, self.feature_dim, self.plane_size, self.plane_size).float().cuda().requires_grad_(True))
-        self.init_parameters()
-        self.position_encoding, self.num_channel = get_embedder(6, 0)
+        # self.init_parameters()
+        self.position_encoding, self.num_channel = get_embedder(4, 0)
 
 
 
     def init_parameters(self) -> None:
         # Important for performance
-        nn.init.uniform_(self.triplane, -1e-2, 1e-2)
+        # nn.init.uniform_(self.triplane, -1e-2, 1e-2)
+        nn.init.normal_(self.triplane, mean=0.0, std=0.1)
 
 
     def forward(self, p):
+        # print("the triplane feature,",self.triplane.min(),self.triplane.max())
         _texc = (p.view(-1, 3) - self.AABB[0][None, ...]) / (self.AABB[1][None, ...] - self.AABB[0][None, ...])
         xyz =  2. * torch.clamp(_texc, min=0, max=1)-1
         xyz_contraction = xyz[None,None,:,:]
@@ -120,6 +123,16 @@ class SurfaceClassifier(nn.Module):
 
                 self.add_module("conv%d" % l, self.filters[l])
 
+        # self.init_parameters()
+
+    
+    def init_parameters(self) -> None:
+        # Important for performance
+        # nn.init.uniform_(self.triplane, -1e-2, 1e-2)
+
+        for layer in self.filters:
+            nn.init.normal_(layer.weight, mean=0.0, std=0.1)
+
     def forward(self, feature):
         '''
         :param feature: list of [BxC_inxHxW] tensors of  features
@@ -155,3 +168,212 @@ class SurfaceClassifier(nn.Module):
     
 
 
+def init_weights(net, init_type='normal', init_gain=0.02):
+    """Initialize network weights.
+
+    Parameters:
+        net (network)   -- network to be initialized
+        init_type (str) -- the name of an initialization method: normal | xavier | kaiming | orthogonal
+        init_gain (float)    -- scaling factor for normal, xavier and orthogonal.
+
+    We use 'normal' in the original pix2pix and CycleGAN paper. But xavier and kaiming might
+    work better for some applications. Feel free to try yourself.
+    """
+
+    def init_func(m):  # define the initialization function
+        classname = m.__class__.__name__
+        if hasattr(m, 'weight') and (classname.find('Conv') != -1 or classname.find('Linear') != -1):
+            if init_type == 'normal':
+                init.normal_(m.weight.data, 0.0, init_gain)
+            elif init_type == 'xavier':
+                init.xavier_normal_(m.weight.data, gain=init_gain)
+            elif init_type == 'kaiming':
+                init.kaiming_normal_(m.weight.data, a=0, mode='fan_in')
+            elif init_type == 'orthogonal':
+                init.orthogonal_(m.weight.data, gain=init_gain)
+            else:
+                raise NotImplementedError('initialization method [%s] is not implemented' % init_type)
+            if hasattr(m, 'bias') and m.bias is not None:
+                init.constant_(m.bias.data, 0.0)
+        elif classname.find(
+                'BatchNorm2d') != -1:  # BatchNorm Layer's weight is not a matrix; only normal distribution applies.
+            init.normal_(m.weight.data, 1.0, init_gain)
+            init.constant_(m.bias.data, 0.0)
+
+    print('initialize network with %s' % init_type)
+    net.apply(init_func)  # apply the initialization function <init_func>
+
+
+class MultiTriplane(nn.Module):
+    def __init__(self, resolution,feature_dim,num_objs)->None:
+        super().__init__()
+
+        self.num_objs = num_objs
+        self.embeddings = nn.ParameterList([nn.Parameter(torch.randn(1, feature_dim, resolution, resolution)*0.001) for _ in range(3*num_objs)])
+
+    def sample_plane(self, coords2d, plane):
+        assert len(coords2d.shape) == 3, coords2d.shape
+        sampled_features = torch.nn.functional.grid_sample(plane,
+                                                           coords2d.reshape(coords2d.shape[0], 1, -1, coords2d.shape[-1]),
+                                                           mode='bilinear', padding_mode='zeros', align_corners=True)
+        N, C, H, W = sampled_features.shape
+        sampled_features = sampled_features.reshape(N, C, H*W).permute(0, 2, 1)
+        return sampled_features
+    
+    def forward(self, obj_idx, coordinates, debug=False):
+
+        xy_embed = self.sample_plane(coordinates[..., 0:2], self.embeddings[3*obj_idx+0])
+        yz_embed = self.sample_plane(coordinates[..., 1:3], self.embeddings[3*obj_idx+1])
+        xz_embed = self.sample_plane(coordinates[..., :3:2], self.embeddings[3*obj_idx+2])
+        
+        #if self.noise_val != None:
+        #    xy_embed = xy_embed + self.noise_val*torch.empty(xy_embed.shape).normal_(mean = 0, std = 0.5).to(self.device)
+        #    yz_embed = yz_embed + self.noise_val*torch.empty(yz_embed.shape).normal_(mean = 0, std = 0.5).to(self.device)
+        #    xz_embed = xz_embed + self.noise_val*torch.empty(xz_embed.shape).normal_(mean = 0, std = 0.5).to(self.device)
+
+                
+        features = torch.sum(torch.stack([xy_embed, yz_embed, xz_embed]), dim=0) 
+        # if self.noise_val != None and self.training:
+        #     features = features + self.noise_val*torch.empty(features.shape).normal_(mean = 0, std = 0.5).to(self.device)
+        return features
+    
+    def tvreg(self):
+        l = 0
+        for embed in self.embeddings:
+            l += ((embed[:, :, 1:] - embed[:, :, :-1])**2).sum()**0.5
+            l += ((embed[:, :, :, 1:] - embed[:, :, :, :-1])**2).sum()**0.5
+        return l/self.num_objs
+    
+    def l2reg(self):
+        l = 0
+        for embed in self.embeddings:
+            l += (embed**2).sum()**0.5
+        return l/self.num_objs
+
+
+
+class FourierFeatureTransform(nn.Module):
+    def __init__(self, num_input_channels, mapping_size, scale=10):
+        super().__init__()
+
+        self._num_input_channels = num_input_channels
+        self._mapping_size = mapping_size
+        self._B = nn.Parameter(torch.randn((num_input_channels, mapping_size)) * scale, requires_grad=False)
+
+    def forward(self, x):
+        B, N, C = x.shape
+        x = (x.reshape(B*N, C) @ self._B).reshape(B, N, -1)
+        x = 2 * np.pi * x
+        return torch.cat([torch.sin(x), torch.cos(x)], dim=-1)
+    
+
+class MLPDecoder:
+    def __init__(self,):
+        super().__init__()
+        # self.net = nn.Sequential(
+        #     FourierFeatureTransform(32, 64, scale=1),
+        #     nn.Linear(128, 128),
+        #     nn.ReLU(inplace=True),
+            
+        #     nn.Linear(128, 128),
+        #     nn.ReLU(inplace=True),
+
+        #     nn.Linear(128, 1),
+        # )
+
+        self.net = nn.Sequential(
+            # https://arxiv.org/abs/2006.10739 - Fourier FN
+
+            nn.Linear(self.channels + self.view_embed_dim, 128),
+            nn.ReLU(),
+            
+            nn.Linear(128, 128),
+            nn.ReLU(),
+            
+            nn.Linear(128, 1),
+        ).to(self.device)
+
+    def forward(self,feature):
+        # 
+        return self.net(feature)
+def frequency_init(freq):
+    def init(m):
+        with torch.no_grad():
+            # if hasattr(m, 'weight'):
+            if isinstance(m, nn.Linear):
+                num_input = m.weight.size(-1)
+                m.weight.uniform_(-np.sqrt(6 / num_input) / freq, np.sqrt(6 / num_input) / freq)
+    return init
+
+def first_layer_sine_init(m):
+    with torch.no_grad():
+        # if hasattr(m, 'weight'):
+        if isinstance(m, nn.Linear):
+            num_input = m.weight.size(-1)
+            m.weight.uniform_(-1 / num_input, 1 / num_input)
+
+# For single-scene fitting
+class CartesianPlaneNonSirenEmbeddingNetwork(nn.Module):
+    def __init__(self, input_dim=3, output_dim=1, aggregate_fn='cat'):  # vs sum
+        super().__init__()
+
+        self.aggregate_fn = aggregate_fn
+        print(f'Using aggregate_fn {aggregate_fn}')
+        self.embeddings = nn.ParameterList([nn.Parameter(torch.randn(1, 32, 256, 256)*0.1) for _ in range(3)])
+        self.position_encoding, self.num_channel = get_embedder(4, 0)
+        self.net = nn.Sequential(
+            # https://arxiv.org/abs/2006.10739
+
+            nn.Linear(32*3+self.num_channel, 128),
+            nn.ReLU(),
+            
+            nn.Linear(128, 128),
+            nn.ReLU(),
+            
+            nn.Linear(128, output_dim),
+        )
+        self.net.apply(frequency_init(30))
+        self.net[0].apply(first_layer_sine_init)
+
+
+    def sample_plane(self, coords2d, plane):
+        assert len(coords2d.shape) == 3, coords2d.shape
+        sampled_features = torch.nn.functional.grid_sample(plane,
+                                                           coords2d.reshape(coords2d.shape[0], 1, -1, coords2d.shape[-1]),
+                                                           mode='bilinear', padding_mode='zeros', align_corners=True)
+        N, C, H, W = sampled_features.shape
+        sampled_features = sampled_features.reshape(N, C, H*W).permute(0, 2, 1)
+        return sampled_features
+
+    def forward(self, coordinates, debug=False):
+        # batch_size, n_coords, n_dims = coordinates.shape
+        
+        xy_embed = self.sample_plane(coordinates[..., 0:2], self.embeddings[0])  # ex: [1, 20000, 64]
+        yz_embed = self.sample_plane(coordinates[..., 1:3], self.embeddings[1])
+        xz_embed = self.sample_plane(coordinates[..., :3:2], self.embeddings[2])
+        # (M, C)
+        
+        # aggregate - product or sum?
+        if self.aggregate_fn == 'sum':
+            features = torch.sum(torch.stack([xy_embed, yz_embed, xz_embed]), dim=0)
+        elif self.aggregate_fn == 'prob':
+            features = torch.prod(torch.stack([xy_embed, yz_embed, xz_embed]), dim=0)
+        elif self.aggregate_fn == 'cat':
+            features = torch.cat([xy_embed, yz_embed, xz_embed],dim=-1)
+        else:
+            raise NotImplementedError()
+
+        pts_embedding = self.position_encoding(coordinates)
+
+        all_feature = torch.cat([features,pts_embedding],dim=-1)
+
+        # todo concate triplane feature.
+        # (M, C)
+        # decoder
+
+        x = self.net(all_feature)
+        # y = torch.tanh(x)
+        # x = torch.sigmoid(x)
+        # x = torch.nn.Sigmoid()(x)
+        # x = self.net(features)
+        return x

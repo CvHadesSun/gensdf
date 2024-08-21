@@ -8,6 +8,7 @@ import glob
 import pytorch_lightning as pl
 from torch.utils.data import DataLoader
 import random
+from scripts.vis_gt import vis_sdf
 
 
 class CustomDataset(torch.utils.data.Dataset):
@@ -45,6 +46,8 @@ class CustomDataset(torch.utils.data.Dataset):
 
         # load sdf samples
 
+        self.samples = np.load(f"{self.root}/samples.npy") # 
+
 
 
 
@@ -53,36 +56,47 @@ class CustomDataset(torch.utils.data.Dataset):
         # return len(self.img_lists)
         return 1
     
-    def get_sample_sdf(self,data_dir):
-        sample_dict = dict(
-            np.load(f"{data_dir}/samples.npz",allow_pickle=True))
+    # def get_sample_sdf(self,data_dir):
+    #     sample_dict = dict(
+    #         np.load(f"{data_dir}/samples.npz",allow_pickle=True))
         
-        in_samples = torch.from_numpy(sample_dict["sample_points_in"])
-        out_samles = torch.from_numpy(sample_dict["sample_points_out"])
+    #     in_samples = torch.from_numpy(sample_dict["sample_points_in"])
+    #     out_samles = torch.from_numpy(sample_dict["sample_points_out"])
         
-        random_idx1 = (torch.rand(self.num_sample//2) *
-                      in_samples.shape[0]).long()
+    #     random_idx1 = (torch.rand(self.num_sample//2) *
+    #                   in_samples.shape[0]).long()
         
-        random_idx2 = (torch.rand(self.num_sample//2) *
-                      out_samles.shape[0]).long()
+    #     random_idx2 = (torch.rand(self.num_sample//2) *
+    #                   out_samles.shape[0]).long()
 
-        _in_sample = in_samples[random_idx1,:]
-        _out_sample = out_samles[random_idx2,:]
+    #     _in_sample = in_samples[random_idx1,:]
+    #     _out_sample = out_samles[random_idx2,:]
 
-        sample_points = torch.cat([_in_sample[:,:3],_out_sample[:,:3]],dim=0)
-        labels_sdf = torch.cat([_in_sample[:,3],_out_sample[:,3]],dim=0)
+    #     sample_points = torch.cat([_in_sample[:,:3],_out_sample[:,:3]],dim=0)
+    #     labels_sdf = torch.cat([_in_sample[:,3],_out_sample[:,3]],dim=0)
 
-        labels_01 =torch.cat([torch.ones(self.num_sample//2),torch.zeros(self.num_sample//2)],dim=0)
+    #     labels_01 =torch.cat([torch.ones(self.num_sample//2),torch.zeros(self.num_sample//2)],dim=0)
+
+    def get_sample_sdf(self,data_dir,idx):
+
+        indices = np.random.randint(low=0, high=self.samples.shape[0], size=self.num_sample)
+        sampled_data = self.samples[indices] # self.points_batch_size, 4
+
+        xyz = sampled_data[:,:3]
+        occ = sampled_data[:,3:4]
+        sdf = sampled_data[:,4:5]
+
+        # vis_sdf(xyz,np.abs(sdf),f"./gt_{idx}.ply")
 
         return {
-            'xyz': sample_points.float(),
-            'labels_sdf': labels_sdf.float(),
-            "labels_01": labels_01.float()
+            'xyz': torch.from_numpy(xyz).float(),
+            'labels_sdf': torch.from_numpy(sdf).float(),
+            "labels_01": torch.from_numpy(occ).float()
         }
 
     def __getitem__(self, idx):
 
-        datum = self.get_sample_sdf(self.root)
+        datum = self.get_sample_sdf(self.root,idx)
         return datum
 
 

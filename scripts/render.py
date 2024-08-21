@@ -1,4 +1,4 @@
-from general_utils import calc_vertex_normals
+from .general_utils import calc_vertex_normals
 
 import torch
 import torch.nn.functional as tfunc
@@ -26,11 +26,11 @@ from pytorch3d.renderer.mesh.shader import SoftDepthShader,HardDepthShader
 from pytorch3d.renderer.lighting import DirectionalLights,PointLights
 import trimesh
 import cv2
-from general_utils import sample_viewpoints
+from .general_utils import sample_viewpoints
 import numpy as np
 import os
 from PIL import Image
-from tools import sample_mesh
+# from tools import sample_mesh
 
 class VertexColorShader(ShaderBase):
     def forward(self, fragments, meshes, **kwargs) -> torch.Tensor:
@@ -239,25 +239,25 @@ class PyRender:
         }
         np.savez(f"{out_dir}/cameras.npz",**data)
 
-rdr = PyRender(256,5)
+# rdr = PyRender(256,5)
 
-root_dir = "/home/wanhu/workspace/gensdf/data/rings_norm/mesh"
-mesh_dirs = os.listdir(root_dir)
-out_dir = "/home/wanhu/workspace/gensdf/data/rings_test"
+# root_dir = "/home/wanhu/workspace/gensdf/data/rings_norm/mesh"
+# mesh_dirs = os.listdir(root_dir)
+# out_dir = "/home/wanhu/workspace/gensdf/data/rings_test"
 
-for i,obj in enumerate(mesh_dirs[:5]):
-    if not 'obj' in obj: continue
-    obj_dir = f"{root_dir}/{obj}"
-    out_path=f"{out_dir}/{i:03d}"
-    os.makedirs(out_path,exist_ok=True)
-    # 
-    with open(f"{out_path}/mesh.txt",'w') as fp:
-        fp.write(obj_dir)
-        fp.close()
-    # 
-    rdr.render_mesh(obj_dir,out_path)
-    #
-    result = sample_mesh(obj_dir)
-    np.savez(f'{out_path}/samples.npz',**result)
+# for i,obj in enumerate(mesh_dirs[:5]):
+#     if not 'obj' in obj: continue
+#     obj_dir = f"{root_dir}/{obj}"
+#     out_path=f"{out_dir}/{i:03d}"
+#     os.makedirs(out_path,exist_ok=True)
+#     # 
+#     with open(f"{out_path}/mesh.txt",'w') as fp:
+#         fp.write(obj_dir)
+#         fp.close()
+#     # 
+#     rdr.render_mesh(obj_dir,out_path)
+#     #
+#     result = sample_mesh(obj_dir)
+#     np.savez(f'{out_path}/samples.npz',**result)
 
-    # break
+#     break

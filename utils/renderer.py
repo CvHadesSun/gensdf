@@ -90,15 +90,7 @@ class OnlineObjectRenderer:
     def render(self):
         return self.renderer.render(self._scene)
 
-if __name__ == "__main__":
-    renderer = OnlineObjectRenderer()
-    renderer.add_mesh(
-        "/path/to/mesh", 
-        "o1", # name of output
-        np.array([np.pi/2, -np.pi/2, 0]),
-        np.array([0, .5, 0])
-    )
-    img, dp = renderer.render()
-    plt.axis("off")
-    plt.imshow(img)
-    plt.show()    
+
+
+
+    

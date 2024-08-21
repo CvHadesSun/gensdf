@@ -17,8 +17,8 @@ def normalize_mesh(mesh_dir: str,out_dir: str):
     max_extent = extents[1]
 
     # Find the center and scale of the mesh
-    center = (min_extent + max_extent) / 2.0
-    scale = (max_extent - min_extent).max() / 2.0
+    center = (min_extent + max_extent) / 2.1
+    scale = (max_extent - min_extent).max() / 2.1
 
     # Normalize the vertices to [-1, 1]
     normalized_vertices = (mesh.vertices - center) / scale
@@ -65,10 +65,12 @@ def split(mesh, points, num_sample = 250_000):
 def sample_mesh(mesh_dir,num_sample=250_000):
     mesh = trimesh.load(mesh_dir, force='mesh')
     box = mesh.bounds
-    B_MIN = box[0]
-    B_MAX = box[1]
+    # B_MIN = box[0]
+    # B_MAX = box[1]
+    B_MIN = np.array([-1,-1,-1])
+    B_MAX = np.array([1,1,1])
     length = B_MAX - B_MIN
-    sigma = length*0.05
+    sigma = length.max()*0.05
     surface_points, _ = trimesh.sample.sample_surface(mesh, num_sample * 2)
     surface_points = surface_points + np.random.normal(scale=sigma, size=surface_points.shape)
 
@@ -77,6 +79,7 @@ def sample_mesh(mesh_dir,num_sample=250_000):
     sample_points = np.concatenate([surface_points,random_points],0)
 
     surface_inside, surface_outside = split(mesh, sample_points, num_sample * 2)
+    # surface_inside, surface_outside = split(mesh, random_points, num_sample * 2)
 
     sample_point_count = 100_000
 
@@ -88,9 +91,14 @@ def sample_mesh(mesh_dir,num_sample=250_000):
     din = distances_in.astype(np.float32).reshape(-1,1)
     dout = -1*distances_out.astype(np.float32).reshape(-1,1)
 
+    
+
     dist = abs(length)
     din = din/dist.max()
-    dout = dout/dout.max()
+    dout = dout/dist.max()
+    # print(dist.max(),length)
+    # print(din.min(),din.max())
+    # print(dout.min(),dout.max())
 
     in_sample = np.concatenate([surface_inside,din],1)
     out_sample = np.concatenate([surface_outside,dout],1)
