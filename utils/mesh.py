@@ -158,15 +158,15 @@ def load_and_precess(mesh_dir,band):
 def get_watertight_mesh(mesh_dir,res,out_dir,batch_size=10_000):
     band = 8/res
     tris = load_and_precess(mesh_dir,band)
-    sdf = torchcumesh2sdf.get_sdf(tris, res, band, batch_size)
-    # v, t = diso.DiffMC().cuda().forward(sdf) # todo: how to smooth?
-    v, f, _, _ = skimage.measure.marching_cubes(sdf.cpu().numpy(), 2/res)
+    sdf = torchcumesh2sdf.get_sdf(tris, res, band, batch_size)-2/res
+    v, f = diso.DiffMC().cuda().forward(sdf) # todo: how to smooth?
+    # v, f, _, _ = skimage.measure.marching_cubes(sdf.cpu().numpy(), 2/res)
     # v,f = mcubes.marching_cubes(sdf.cpu().numpy(), 2/res)
     # to [0,1]
     v_01 = v/res
     # to (-1,1)
     new_v = (v_01 *2 - 1.0)*0.9
-    mcubes.export_obj(new_v, f, out_dir)
+    mcubes.export_obj(new_v.cpu().numpy(), f.cpu().numpy(), out_dir)
 
 
 def get_watertight_mesh_cpu(mesh_dir,res,out_dir,mesh_scale=0.8):

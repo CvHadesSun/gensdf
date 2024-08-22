@@ -43,6 +43,8 @@ class TriplaneSDF(pl.LightningModule):
         else:
             raise NotImplementedError()
 
+        
+
         self.build_model()
 
         if opt.loss_fn == "l1":

@@ -99,7 +99,63 @@ class CustomDataset(torch.utils.data.Dataset):
         datum = self.get_sample_sdf(self.root,idx)
         return datum
 
+class CustomDatasetMultiObjs(torch.utils.data.Dataset):
 
+    """
+    000
+    |
+    -mesh.txt
+    -colors
+    -masks
+    -depths
+    -masks
+    -camears.npz
+    -samples.npz
+
+    """
+    def __init__(self, root,split, opt):
+
+        self.opt = opt
+        self.root = root
+        self.num_sample = opt.num_sample
+        self.split = split
+        # self.samples = np.load(f"{self.root}/samples.npy") # 
+        self.get_subjects()
+
+    def get_subjects(self):
+        _subjests = os.listdir(self.root)
+
+        if self.split=='train':
+            self.subjests = _subjests
+        else:
+            self.subjests = [_subjests[-1]]
+        
+    def __len__(self):
+        # return len(self.img_lists)
+        return len(self.subjests)
+
+    def get_sample_sdf(self,idx):
+        samples = np.load(f"{self.root}/{self.subjests[idx]}/samples.npy")
+        indices = np.random.randint(low=0, high=samples.shape[0], size=self.num_sample)
+        sampled_data = samples[indices] # self.points_batch_size, 4
+
+        xyz = sampled_data[:,:3]
+        occ = sampled_data[:,3:4]
+        sdf = sampled_data[:,4:5]
+
+        # vis_sdf(xyz,np.abs(sdf),f"./gt_{idx}.ply")
+
+        return {
+            "obj_idx": idx,
+            'xyz': torch.from_numpy(xyz).float(),
+            'labels_sdf': torch.from_numpy(sdf).float(),
+            "labels_01": torch.from_numpy(occ).float()
+        }
+
+    def __getitem__(self, idx):
+        datum = self.get_sample_sdf(idx)
+        return datum
+    
 class CustomDataModule(pl.LightningDataModule):
     def __init__(self, opt, **kwargs):
         super().__init__()
@@ -118,6 +174,49 @@ class CustomDataModule(pl.LightningDataModule):
                               persistent_workers=True and self.opt.train_num_workers> 0,
                               pin_memory=True,
                               batch_size=1)
+        else:
+            return super().train_dataloader()
+
+    def val_dataloader(self):
+        if hasattr(self, "valset"):
+            return DataLoader(self.valset,
+                              shuffle=False,
+                              num_workers=self.opt.val_num_workers,
+                              persistent_workers=True and self.opt.val_num_workers > 0,
+                              pin_memory=True,
+                              batch_size=1)
+        else:
+            return super().test_dataloader()
+
+    def test_dataloader(self):
+        if hasattr(self, "testset"):
+            return DataLoader(self.testset,
+                              shuffle=False,
+                              num_workers=self.opt.test_num_workers,
+                              persistent_workers=True and self.opt.test_num_workers > 0,
+                              pin_memory=True,
+                              batch_size=1)
+        else:
+            return super().test_dataloader()
+        
+class CustomDataModuleMultiObj(pl.LightningDataModule):
+    def __init__(self, opt, **kwargs):
+        super().__init__()
+
+        data_dir = Path(hydra.utils.to_absolute_path(opt.dataroot))
+        for split in ("train", "val", "test"):
+            dataset = CustomDatasetMultiObjs(data_dir, split, opt)
+            setattr(self, f"{split}set", dataset)
+        self.opt = opt
+
+    def train_dataloader(self):
+        if hasattr(self, "trainset"):
+            return DataLoader(self.trainset,
+                              shuffle=True,
+                              num_workers=self.opt.train_num_workers,
+                              persistent_workers=True and self.opt.train_num_workers> 0,
+                              pin_memory=True,
+                              batch_size=self.opt.batch_size)
         else:
             return super().train_dataloader()
 

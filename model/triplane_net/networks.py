@@ -267,35 +267,7 @@ class FourierFeatureTransform(nn.Module):
         return torch.cat([torch.sin(x), torch.cos(x)], dim=-1)
     
 
-class MLPDecoder:
-    def __init__(self,):
-        super().__init__()
-        # self.net = nn.Sequential(
-        #     FourierFeatureTransform(32, 64, scale=1),
-        #     nn.Linear(128, 128),
-        #     nn.ReLU(inplace=True),
-            
-        #     nn.Linear(128, 128),
-        #     nn.ReLU(inplace=True),
 
-        #     nn.Linear(128, 1),
-        # )
-
-        self.net = nn.Sequential(
-            # https://arxiv.org/abs/2006.10739 - Fourier FN
-
-            nn.Linear(self.channels + self.view_embed_dim, 128),
-            nn.ReLU(),
-            
-            nn.Linear(128, 128),
-            nn.ReLU(),
-            
-            nn.Linear(128, 1),
-        ).to(self.device)
-
-    def forward(self,feature):
-        # 
-        return self.net(feature)
 def frequency_init(freq):
     def init(m):
         with torch.no_grad():

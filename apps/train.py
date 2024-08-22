@@ -9,7 +9,7 @@ import sys
 
 sys.path.append(os.getcwd())
 
-@hydra.main(config_path="../confs", config_name="TriplanceSDF")
+@hydra.main(config_path="../confs", config_name="MultiTriplaneSDF")
 def main(opt):
     pl.seed_everything(opt.seed)
     torch.set_printoptions(precision=6)

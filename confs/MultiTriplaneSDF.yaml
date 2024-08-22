@@ -1,0 +1,70 @@
+name: "rings_103"
+subject: "000"
+experiment: "triplane_sdf_multi_objs"
+
+dataroot: "/home/wanhu/workspace/gensdf/data/rings_test"
+
+# 
+seed: 42
+resume: true
+
+
+train:
+  precision: 32
+  max_epochs: 1_501
+  check_val_every_n_epoch: 500
+  
+
+checkpoint:
+  save_top_k: 1
+  every_n_epochs: 10
+
+dataset:
+  _target_: dataloader.ring_dataset.CustomDataModuleMultiObj
+  opt:
+    dataroot: ${dataroot}
+    subject: ${subject}
+    num_sample: 500_000
+
+    train_num_workers: 8
+    val_num_workers: 0
+    test_num_workers: 0
+
+    batch_size: 16
+
+
+model:
+  _target_: model.triplane_net.multi_model.TriplaneSDF
+  opt:
+    # AABB: [-1,-1,-1]
+    train_sdf: true
+    res: 256
+    num_samples: 1000_000  # batch val pts number.
+    # triplane
+    triplane:
+      resolution: 256
+      feature_dim: 32
+      embed_dim: 4
+
+    deocder:
+      # mlp_filters: [135,128,64,32,16,1]
+      latend_dim: 128
+    # 
+    loss_fn: "l1" # "mse"
+    last_op: None # "sigmoid"  "tanh"
+    lr_feature_init: 0.001
+    feature_lr_step: 800
+    feature_lr_gamma: 0.1
+
+    lr_decoder_init: 5e-4
+    decoder_lr_step: 500
+    decoder_lr_gamma: 0.1
+
+    save_epochs: [1_000,1_200,1_500]
+
+    fix_mlp_util: 1_000
+
+
+hydra:
+  run:
+    dir: "outputs/${experiment}/${name}"

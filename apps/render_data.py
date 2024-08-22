@@ -14,7 +14,7 @@ root_dir = "/home/wanhu/workspace/gensdf/data/rings_norm/wmesh"
 mesh_dirs = os.listdir(root_dir)
 out_dir = "/home/wanhu/workspace/gensdf/data/rings_test"
 
-for i,obj in enumerate(mesh_dirs[:5]):
+for i,obj in enumerate(mesh_dirs[:]):
     if not 'obj' in obj: continue
     obj_dir = f"{root_dir}/{obj}"
     out_path=f"{out_dir}/{i:03d}"
@@ -28,4 +28,4 @@ for i,obj in enumerate(mesh_dirs[:5]):
     #
     generate_volume_dataset(obj_dir,f"{out_path}/samples.npy",2_000_000,0.01)
 
-    break 
+    # break 

@@ -51,7 +51,7 @@ occ_in = occ[mask]
 # print(sdf.min(),sdf.max())
 
 
-vis_sdf(pts_in,occ_in,'out_occ.ply')
+# vis_sdf(pts_in,occ_in,'out_occ.ply')
 
 
 

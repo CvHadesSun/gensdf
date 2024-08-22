@@ -21,7 +21,7 @@ for obj in tqdm(objs):
         continue
     obj_dir = f"{data_dir}/mesh/{obj}"
     out_path = f"{out_dir}/{obj}"
-    get_watertight_mesh(obj_dir,res,out_path)
+    get_watertight_mesh(obj_dir,res,"./test.obj")
 
-    # break
+    break
 
