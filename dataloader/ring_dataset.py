@@ -123,12 +123,12 @@ class CustomDatasetMultiObjs(torch.utils.data.Dataset):
         self.get_subjects()
 
     def get_subjects(self):
-        _subjests = os.listdir(self.root)
+        _subjests = sorted(os.listdir(self.root))
 
         if self.split=='train':
-            self.subjests = _subjests
+            self.subjests = _subjests[:]
         else:
-            self.subjests = [_subjests[-1]]
+            self.subjests = [_subjests[1]]
         
     def __len__(self):
         # return len(self.img_lists)
@@ -145,12 +145,20 @@ class CustomDatasetMultiObjs(torch.utils.data.Dataset):
 
         # vis_sdf(xyz,np.abs(sdf),f"./gt_{idx}.ply")
 
-        return {
-            "obj_idx": idx,
-            'xyz': torch.from_numpy(xyz).float(),
-            'labels_sdf': torch.from_numpy(sdf).float(),
-            "labels_01": torch.from_numpy(occ).float()
-        }
+        if self.split == "train":
+            return {
+                "obj_idx": idx,
+                'xyz': torch.from_numpy(xyz).float(),
+                'labels_sdf': torch.from_numpy(sdf).float(),
+                "labels_01": torch.from_numpy(occ).float()
+            }
+        else:
+            return {
+                "obj_idx": 1,
+                'xyz': torch.from_numpy(xyz).float(),
+                'labels_sdf': torch.from_numpy(sdf).float(),
+                "labels_01": torch.from_numpy(occ).float()
+            }
 
     def __getitem__(self, idx):
         datum = self.get_sample_sdf(idx)

@@ -126,15 +126,16 @@ class TriplaneSDF(pl.LightningModule):
 
         os.makedirs("checkpoints",exist_ok=True)
 
-        if self.current_epoch in self.cfg.save_epochs:
-                # print(f'Saving checkpoint at step {step}')
-                torch.save({
-                    'epoch': self.current_epoch,
-                    'triplane_state_dict': self.triplane_feat.state_dict(),
-                    'decoder_state_dict': self.mlp_decoder.state_dict(),
-                    'optimizer_state_dict': self.optimizer_list[0].state_dict(),
-                    'loss': loss.item(),
-                }, f'checkpoints/model_epoch_{self.current_epoch}_loss_{loss.item():.4f}.pt')
+        if batch_idx == 0:
+            if self.current_epoch in self.cfg.save_epochs:
+                    # print(f'Saving checkpoint at step {step}')
+                    torch.save({
+                        'epoch': self.current_epoch,
+                        'triplane_state_dict': self.triplane_feat.state_dict(),
+                        'decoder_state_dict': self.mlp_decoder.state_dict(),
+                        'optimizer_state_dict': self.optimizer_list[0].state_dict(),
+                        'loss': loss.item(),
+                    }, f'checkpoints/model_epoch_{self.current_epoch}_loss_{loss.item():.4f}.pt')
 
     @torch.no_grad()
     def validation_step(self, batch, batch_idx, *args, **kwargs):
@@ -162,6 +163,51 @@ class TriplaneSDF(pl.LightningModule):
             if num_pts % num_samples:
                 sdf[num_batch*num_samples:] = self(obj_idx,grids[num_batch*num_samples:][None,...])[0,:,0]
 
+            sdf = sdf.reshape(self.cfg.res,self.cfg.res,self.cfg.res) *-1
+            if 0:
+                out_dir = "./test"
+                os.makedirs(out_dir,exist_ok=True)
+                vis_sdf(grids.cpu().numpy(),sdf.cpu().numpy(),f"{out_dir}/{self.current_epoch:04d}.ply")
+            # try:
+            if 1:
+                vertices, triangles, normals, values = measure.marching_cubes(sdf.cpu().numpy(), 0.0) # todo:use diffcu.
+                # vertices, triangles = diso.DiffMC().cuda().forward(sdf.cuda())
+                out_dir = "./val_mesh"
+                os.makedirs(out_dir,exist_ok=True)
+                vertices /=self.cfg.res
+                new_vertices = (vertices*2-1)*0.9
+                mcubes.export_obj(new_vertices,triangles,f"{out_dir}/{self.current_epoch:04d}.obj")
+                # mcubes.export_obj(new_vertices.cpu().numpy(),triangles.cpu().numpy(),f"{out_dir}/{self.current_epoch:04d}.obj")
+            # except:
+            #     print("error cannot marching cubes")
+            #     return -1
+
+    @torch.no_grad()
+    def test(self, obj_idx):
+        # todo: test error to log, or save some middle results or resconstruction ?
+        # if batch_idx == 0:
+        if 1:
+            grids = create_cube(self.cfg.res)
+
+            grids = grids.cuda()
+
+            num_pts = grids.shape[0]
+
+            sdf = torch.zeros(num_pts)
+
+            num_samples = self.cfg.num_samples
+
+            num_batch = num_pts // num_samples
+            # obj_idx = batch['obj_idx']
+
+            for i in range(num_batch):
+                batch_pts = grids[i*num_samples:i*num_samples+num_samples]
+                pred_sdf = self(obj_idx,batch_pts[None,...])
+                sdf[i*num_samples:i*num_samples+num_samples] = pred_sdf[0,:,0]
+
+            if num_pts % num_samples:
+                sdf[num_batch*num_samples:] = self(obj_idx,grids[num_batch*num_samples:][None,...])[0,:,0]
+
             sdf = sdf.reshape(self.cfg.res,self.cfg.res,self.cfg.res)*-1
             if 0:
                 out_dir = "./test"
@@ -171,7 +217,7 @@ class TriplaneSDF(pl.LightningModule):
             if 1:
                 # verts, faces, normals, values = measure.marching_cubes(sdf_numpy, 0.0) # todo:use diffcu.
                 vertices, triangles = diso.DiffMC().cuda().forward(sdf.cuda())
-                out_dir = "./val_mesh"
+                out_dir = "./test_mesh"
                 os.makedirs(out_dir,exist_ok=True)
                 vertices /=self.cfg.res
                 new_vertices = (vertices*2-1)*0.9
@@ -179,7 +225,6 @@ class TriplaneSDF(pl.LightningModule):
             # except:
             #     print("error cannot marching cubes")
             #     return -1
-
 
     ######################
     # DATA RELATED HOOKS #
@@ -192,6 +237,18 @@ class TriplaneSDF(pl.LightningModule):
 
     def test_dataloader(self):
         return self.datamodule.test_dataloader()
+
+
+
+    def load_ckpts_own(self,dir):
+        print(f'load ckpt from {dir}')
+        ckpts = torch.load(dir)
+        self.triplane_feat.load_state_dict(ckpts['triplane_state_dict'])
+        self.mlp_decoder.load_state_dict(ckpts['decoder_state_dict'])
+
+        self.triplane_feat.cuda()
+        self.mlp_decoder.cuda()
+
 
 
 

@@ -1,6 +1,6 @@
 name: "rings_103"
 subject: "000"
-experiment: "triplane_sdf_multi_objs"
+experiment: "triplane_sdf_1.0"
 
 dataroot: "/home/wanhu/workspace/gensdf/data/rings_test"
 
@@ -53,11 +53,11 @@ model:
     loss_fn: "l1" # "mse"
     last_op: None # "sigmoid"  "tanh"
     lr_feature_init: 0.001
-    feature_lr_step: 800
+    feature_lr_step: 80_000
     feature_lr_gamma: 0.1
 
-    lr_decoder_init: 5e-4
-    decoder_lr_step: 500
+    lr_decoder_init: 1e-3
+    decoder_lr_step: 80_000
     decoder_lr_gamma: 0.1
 
     save_epochs: [1_000,1_200,1_500]
