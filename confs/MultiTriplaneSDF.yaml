@@ -1,18 +1,22 @@
 name: "rings_103"
-subject: "000"
-experiment: "triplane_sdf_1.0"
+subject: "00661"
+experiment: "triplane_sdf_100_obj_training_deocder"
+# experiment: "triplane_sdf_single_obj_test_density_sample"
+# experiment: "triplane_occ_single_objd"
 
-dataroot: "/home/wanhu/workspace/gensdf/data/rings_test"
-
+# dataroot: "/home/wanhu/workspace/gensdf/data/rings_1000"
+dataroot: "/home/wanhu/dataset/subfolder_8_100_sample"
+restore_ckpt: "../triplane_sdf_500_debug/"
 # 
 seed: 42
-resume: true
+resume: false
+load_decoder: true # for decoder weights.
 
 
 train:
   precision: 32
-  max_epochs: 1_501
-  check_val_every_n_epoch: 500
+  max_epochs: 601
+  check_val_every_n_epoch: 10000
   
 
 checkpoint:
@@ -24,47 +28,65 @@ dataset:
   opt:
     dataroot: ${dataroot}
     subject: ${subject}
-    num_sample: 500_000
+    num_sample: 300_000  # sample pts for training.
 
     train_num_workers: 8
     val_num_workers: 0
     test_num_workers: 0
 
-    batch_size: 16
+    batch_size: 1
+
+    num_objs: 100
+
+    obj_id: -1
+    val_obj_id: 0
 
 
 model:
-  _target_: model.triplane_net.multi_model.TriplaneSDF
+  _target_: model.triplane_net.multiTriplane.TriplaneSDF
   opt:
     # AABB: [-1,-1,-1]
+    obj_name: ${subject}
+    work_dir: ""
+    val_mesh: false
+    clamped: 0.9
+    train_triplane: true
+    train_decoder: false
     train_sdf: true
-    res: 256
-    num_samples: 1000_000  # batch val pts number.
+    res: 512
+    num_samples: 1_000_000  # batch val pts number.
     # triplane
     triplane:
-      resolution: 256
+      resolution: 128
       feature_dim: 32
       embed_dim: 4
+    
+    c2f_scale: [101,301,401]
+    max_epoch: ${train.max_epochs}
+
+    
 
     deocder:
       # mlp_filters: [135,128,64,32,16,1]
       latend_dim: 128
     # 
-    loss_fn: "l1" # "mse"
-    last_op: None # "sigmoid"  "tanh"
+    loss_fn: "l1" # "mse"  # for sdf loss
+    last_op: "tanh" # "sigmoid"  "tanh"
     lr_feature_init: 0.001
-    feature_lr_step: 80_000
+    feature_lr_step: 1000
     feature_lr_gamma: 0.1
 
     lr_decoder_init: 1e-3
-    decoder_lr_step: 80_000
+    decoder_lr_step: 5000
     decoder_lr_gamma: 0.1
 
-    save_epochs: [1_000,1_200,1_500]
+    save_epochs: [300,400,600]
 
-    fix_mlp_util: 1_000
+    # fix_mlp_util: 1_000
 
 
 hydra:
   run:
-    dir: "outputs/${experiment}/${name}"
+    # dir: "/home/wanhu/dataset/sdf_1k/${experiment}"
+    dir: "outputs/${experiment}"
+

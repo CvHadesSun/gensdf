@@ -120,15 +120,25 @@ class CustomDatasetMultiObjs(torch.utils.data.Dataset):
         self.num_sample = opt.num_sample
         self.split = split
         # self.samples = np.load(f"{self.root}/samples.npy") # 
-        self.get_subjects()
+        self.get_subjects_multi()
 
     def get_subjects(self):
-        _subjests = sorted(os.listdir(self.root))
+        _subjests =  sorted(os.listdir(self.root),key=lambda s: int(s))
 
         if self.split=='train':
-            self.subjests = _subjests[:]
+            # self.subjests = _subjests[:self.opt.num_objs]
+            self.subjests = [_subjests[self.opt.obj_id]]
         else:
-            self.subjests = [_subjests[1]]
+            self.subjests = [_subjests[self.opt.obj_id]]
+
+    def get_subjects_multi(self):
+        _subjests =  sorted(os.listdir(self.root),key=lambda s: int(s))
+
+        if self.split=='train':
+            self.subjests = _subjests[:self.opt.num_objs]
+            # self.subjests = [_subjests[self.opt.obj_id]]
+        else:
+            self.subjests = [_subjests[self.opt.val_obj_id]]
         
     def __len__(self):
         # return len(self.img_lists)
@@ -136,6 +146,7 @@ class CustomDatasetMultiObjs(torch.utils.data.Dataset):
 
     def get_sample_sdf(self,idx):
         samples = np.load(f"{self.root}/{self.subjests[idx]}/samples.npy")
+        # samples = np.load(f"{self.root}/{self.subjests[idx]}/sample_voxel_sdf.npy")
         indices = np.random.randint(low=0, high=samples.shape[0], size=self.num_sample)
         sampled_data = samples[indices] # self.points_batch_size, 4
 
@@ -154,7 +165,7 @@ class CustomDatasetMultiObjs(torch.utils.data.Dataset):
             }
         else:
             return {
-                "obj_idx": 1,
+                "obj_idx": self.opt.val_obj_id,
                 'xyz': torch.from_numpy(xyz).float(),
                 'labels_sdf': torch.from_numpy(sdf).float(),
                 "labels_01": torch.from_numpy(occ).float()
@@ -164,6 +175,84 @@ class CustomDatasetMultiObjs(torch.utils.data.Dataset):
         datum = self.get_sample_sdf(idx)
         return datum
     
+class MeshDatasetMultiObjs(torch.utils.data.Dataset):
+
+    """
+    000
+    |
+    -mesh.txt
+    -colors
+    -masks
+    -depths
+    -masks
+    -camears.npz
+    -samples.npz
+
+    """
+    def __init__(self, root,split, opt):
+
+        self.opt = opt
+        self.root = root
+        self.num_sample = opt.num_sample
+        self.split = split
+        # self.samples = np.load(f"{self.root}/samples.npy") # 
+        self.get_subjects_multi()
+
+    def get_subjects(self):
+        _subjests =  sorted(os.listdir(self.root),key=lambda s: int(s))
+
+        if self.split=='train':
+            # self.subjests = _subjests[:self.opt.num_objs]
+            self.subjests = [_subjests[self.opt.obj_id]]
+        else:
+            self.subjests = [_subjests[self.opt.obj_id]]
+
+    def get_subjects_multi(self):
+        # _subjests =  sorted(os.listdir(self.root),key=lambda s: int(s))
+        _subjests =  sorted(os.listdir(self.root))
+
+        if self.split=='train':
+            self.subjests = _subjests[:self.opt.num_objs]
+            # self.subjests = [_subjests[self.opt.obj_id]]
+        else:
+            self.subjests = [_subjests[self.opt.val_obj_id]]
+        
+    def __len__(self):
+        # return len(self.img_lists)
+        return len(self.subjests)
+    
+    def _get_data(self,idx):
+
+        num_surf = 10_0000
+        num_vol = 10_0000
+
+        vol_samples = np.load(f"{self.root}/{self.subjests[idx]}/volume_points.npy") # [xyz,sdf]
+        surf_samples = np.load(f"{self.root}/{self.subjests[idx]}/surface_points.npy") # [xyz,sdf,nxyz]
+
+        surf_indx = np.random.randint(low=0, high=surf_samples.shape[0], size=num_surf)
+        vol_indx = np.random.randint(low=0, high=vol_samples.shape[0], size=num_vol)
+
+        surf_sampled_data = surf_samples[surf_indx] # self.points_batch_size, 4
+        vol_sampled_data = vol_samples[vol_indx] # self.points_batch_size, 7
+
+        surf_xyz = surf_sampled_data[:,:3]
+        surf_normal = surf_sampled_data[:,4:]
+
+        vol_xyz = vol_sampled_data[:,:3]
+        vol_sdf = vol_sampled_data[:,3:4]
+
+        return {
+            "obj_idx": idx,
+            'surf_xyz': torch.from_numpy(surf_xyz).float(),
+            'surf_normal': torch.from_numpy(surf_normal).float(),
+            'vol_xyz': torch.from_numpy(vol_xyz).float(),
+            'vol_sdf': torch.from_numpy(vol_sdf).float()
+        }
+
+    def __getitem__(self, idx):
+        datum = self._get_data(idx)
+        return datum
+    
 class CustomDataModule(pl.LightningDataModule):
     def __init__(self, opt, **kwargs):
         super().__init__()
@@ -171,6 +260,7 @@ class CustomDataModule(pl.LightningDataModule):
         data_dir = Path(hydra.utils.to_absolute_path(opt.dataroot))
         for split in ("train", "val", "test"):
             dataset = CustomDataset(data_dir, opt.subject, opt)
+            # dataset = MeshDatasetMultiObjs(data_dir, split, opt)
             setattr(self, f"{split}set", dataset)
         self.opt = opt
 
@@ -213,14 +303,14 @@ class CustomDataModuleMultiObj(pl.LightningDataModule):
 
         data_dir = Path(hydra.utils.to_absolute_path(opt.dataroot))
         for split in ("train", "val", "test"):
-            dataset = CustomDatasetMultiObjs(data_dir, split, opt)
+            dataset = MeshDatasetMultiObjs(data_dir, split, opt)
             setattr(self, f"{split}set", dataset)
         self.opt = opt
 
     def train_dataloader(self):
         if hasattr(self, "trainset"):
             return DataLoader(self.trainset,
-                              shuffle=True,
+                              shuffle=False,
                               num_workers=self.opt.train_num_workers,
                               persistent_workers=True and self.opt.train_num_workers> 0,
                               pin_memory=True,

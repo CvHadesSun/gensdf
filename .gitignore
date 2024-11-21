@@ -134,3 +134,7 @@ outputs/
 data/rings
 data/rings_norm
 data/rings_test
+
+data/
+wandb/
+tensorboard/

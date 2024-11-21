@@ -21,8 +21,8 @@ from model.triplane_net.multi_network import MLPDecoder,MultiTriplane
 import mcubes
 
 import logging
-logger = logging.getLogger("TriplaneSDF")
-logger.addHandler(logging.FileHandler("tri-sdf.log"))
+# logger = logging.getLogger("TriplaneSDF")
+# logger.addHandler(logging.FileHandler("tri-sdf.log"))
 
 class TriplaneSDF(pl.LightningModule):
     def __init__(self, opt, datamodule):
@@ -46,16 +46,25 @@ class TriplaneSDF(pl.LightningModule):
         self.build_model()
 
         if opt.loss_fn == "l1":
-            self.loss_fn = nn.L1Loss(reduction='none')
+            self.loss_fn = nn.L1Loss()
         elif opt.loss_fn == "mse":
             self.loss_fn = nn.MSELoss()
         elif opt.loss_fn == "bce":
             self.loss_fn = torch.nn.BCEWithLogitsLoss()
         else:
             raise NotImplementedError()
-        
 
+        if opt.train_triplane:
+            self.triplane_feat.train()
+        else:
+            self.triplane_feat.eval()
 
+        if opt.train_decoder:
+            self.mlp_decoder.train()
+        else:
+            self.mlp_decoder.eval()
+
+        self.wk_dir = self.cfg.work_dir
 
     def build_model(self):
         self.triplane_feat = MultiTriplane(num_objs=self.num_objs,**self.cfg.triplane)
@@ -67,17 +76,20 @@ class TriplaneSDF(pl.LightningModule):
     def configure_optimizers(self):
     
         optimizer_feature = torch.optim.Adam(self.triplane_feat.parameters(), self.cfg.lr_feature_init)
-        optimizer_decoder = torch.optim.Adam(self.mlp_decoder.parameters(), self.cfg.lr_decoder_init)
+        # optimizer_decoder = torch.optim.Adam(self.mlp_decoder.parameters(), self.cfg.lr_decoder_init)
         # optimizer_decoder = torch.optim.RMSprop(self.mlp_decoder.parameters(), lr=self.cfg.lr_decoder_init,momentum=0, weight_decay=0)
 
 
         feature_scheduler = torch.optim.lr_scheduler.StepLR(
                         optimizer_feature, self.cfg.feature_lr_step, self.cfg.feature_lr_gamma)
-        decoder_scheduler = torch.optim.lr_scheduler.StepLR(
-                        optimizer_decoder, self.cfg.decoder_lr_step, self.cfg.decoder_lr_gamma)
+        # decoder_scheduler = torch.optim.lr_scheduler.StepLR(
+        #                 optimizer_decoder, self.cfg.decoder_lr_step, self.cfg.decoder_lr_gamma)
         
-        self.optimizer_list = [optimizer_feature,optimizer_decoder]
-        self.scheduler_list = [feature_scheduler,decoder_scheduler]
+        # self.optimizer_list = [optimizer_feature,optimizer_decoder]
+        # self.scheduler_list = [feature_scheduler,decoder_scheduler]
+
+        self.optimizer_list = [optimizer_feature]
+        self.scheduler_list = [feature_scheduler]
 
         return self.optimizer_list, self.scheduler_list
 
@@ -91,12 +103,14 @@ class TriplaneSDF(pl.LightningModule):
 
         return pred
 
+
     def training_step(self, batch, batch_idx):
-        if self.current_epoch > self.cfg.fix_mlp_util:
-            self.mlp_decoder.eval() # fix the decoder weights.
+        # if self.current_epoch > self.cfg.fix_mlp_util:
+        #     self.mlp_decoder.eval() # fix the decoder weights.
 
         obj_idx = batch['obj_idx']
         xyz = batch['xyz'] # [B,N,3]
+
 
         if self.cfg.train_sdf:
             label= batch['labels_sdf']
@@ -104,11 +118,12 @@ class TriplaneSDF(pl.LightningModule):
             label = batch["labels_01"]
         # forward
         pred = self(obj_idx,xyz)
-
+        if self.cfg.train_sdf:
+            clamp_value = self.cfg.clamped
+            pred = torch.clamp(pred, -1*clamp_value, clamp_value)
+            label = torch.clamp(label, -1*clamp_value, clamp_value)
         # sdf loss
-        error = self.loss_fn(pred,label)
-        # error = self.mse_loss(pred,label)
-        loss = error.mean()
+        loss = self.loss_fn(pred,label)
 
         self.log(f"train_loss", loss.item(),prog_bar=True)
         # 
@@ -124,11 +139,64 @@ class TriplaneSDF(pl.LightningModule):
             # print(scd.get_lr())
             scd.step()
 
-        os.makedirs("checkpoints",exist_ok=True)
+        if batch_idx == 0:
+            if self.current_epoch in self.cfg.save_epochs:
+                    # print(f'Saving checkpoint at step {step}')
+                    
+                    os.makedirs(f"{self.wk_dir}/checkpoints",exist_ok=True)
+                    torch.save({
+                        'epoch': self.current_epoch,
+                        'triplane_state_dict': self.triplane_feat.state_dict(),
+                        'decoder_state_dict': self.mlp_decoder.state_dict(),
+                        # 'optimizer_state_dict': self.optimizer_list[0].state_dict(),
+                        'loss': loss.item(),
+                    }, f'{self.wk_dir}/checkpoints/model_epoch_{self.current_epoch}_loss_{loss.item():.4f}.pt')
+
+    def training_step_v1(self, batch, batch_idx):
+        # if self.current_epoch > self.cfg.fix_mlp_util:
+        #     self.mlp_decoder.eval() # fix the decoder weights.
+
+        obj_idx = batch['obj_idx']
+        xyz = batch['xyz'] # [B,N,3]
+
+        if self.cfg.train_sdf:
+            label= batch['labels_sdf']
+        else:
+            label = batch["labels_01"]
+        # forward
+        pred = self(obj_idx,xyz)
+        if self.cfg.train_sdf:
+            clamp_value = self.cfg.clamped
+            pred = torch.clamp(pred, -1*clamp_value, clamp_value)
+            label = torch.clamp(label, -1*clamp_value, clamp_value)
+        # sdf loss
+        # error = self.loss_fn(pred,label)
+        # loss = F.l1_loss(pred, label.reshape((label.shape[0], label.shape[1], -1)))
+        loss = self.loss_fn(pred, label.reshape((label.shape[0], label.shape[1], -1)))
+        # error = self.mse_loss(pred,label)
+        # loss = error.mean()
+
+        # print(loss.shape)
+        # exit()
+
+        self.log(f"train_loss", loss.item(),prog_bar=True)
+        # 
+        for opt in self.optimizer_list:
+            opt.zero_grad()
+
+        loss.backward()
+
+        for opt in self.optimizer_list:
+            opt.step()
+
+        for scd in self.scheduler_list:
+            # print(scd.get_lr())
+            scd.step()
 
         if batch_idx == 0:
             if self.current_epoch in self.cfg.save_epochs:
                     # print(f'Saving checkpoint at step {step}')
+                    os.makedirs("checkpoints",exist_ok=True)
                     torch.save({
                         'epoch': self.current_epoch,
                         'triplane_state_dict': self.triplane_feat.state_dict(),
@@ -140,6 +208,8 @@ class TriplaneSDF(pl.LightningModule):
     @torch.no_grad()
     def validation_step(self, batch, batch_idx, *args, **kwargs):
         # todo: test error to log, or save some middle results or resconstruction ?
+        if not self.cfg.val_mesh:
+            return
         # if batch_idx == 0:
         if 1:
             grids = create_cube(self.cfg.res)
@@ -165,22 +235,22 @@ class TriplaneSDF(pl.LightningModule):
 
             sdf = sdf.reshape(self.cfg.res,self.cfg.res,self.cfg.res) *-1
             if 0:
-                out_dir = "./test"
+                out_dir = f"{self.wk_dir}/test"
                 os.makedirs(out_dir,exist_ok=True)
                 vis_sdf(grids.cpu().numpy(),sdf.cpu().numpy(),f"{out_dir}/{self.current_epoch:04d}.ply")
-            # try:
-            if 1:
+            try:
+            # if 1:
                 vertices, triangles, normals, values = measure.marching_cubes(sdf.cpu().numpy(), 0.0) # todo:use diffcu.
                 # vertices, triangles = diso.DiffMC().cuda().forward(sdf.cuda())
-                out_dir = "./val_mesh"
+                out_dir = f"{self.wk_dir}/val_mesh"
                 os.makedirs(out_dir,exist_ok=True)
                 vertices /=self.cfg.res
                 new_vertices = (vertices*2-1)*0.9
                 mcubes.export_obj(new_vertices,triangles,f"{out_dir}/{self.current_epoch:04d}.obj")
                 # mcubes.export_obj(new_vertices.cpu().numpy(),triangles.cpu().numpy(),f"{out_dir}/{self.current_epoch:04d}.obj")
-            # except:
-            #     print("error cannot marching cubes")
-            #     return -1
+            except:
+                print("error cannot marching cubes")
+                return -1
 
     @torch.no_grad()
     def test(self, obj_idx):
@@ -221,7 +291,7 @@ class TriplaneSDF(pl.LightningModule):
                 os.makedirs(out_dir,exist_ok=True)
                 vertices /=self.cfg.res
                 new_vertices = (vertices*2-1)*0.9
-                mcubes.export_obj(new_vertices.cpu().numpy(),triangles.cpu().numpy(),f"{out_dir}/{self.current_epoch:04d}.obj")
+                mcubes.export_obj(new_vertices.cpu().numpy(),triangles.cpu().numpy(),f"{out_dir}/{self.current_epoch:04d}_{obj_idx[0]}.obj")
             # except:
             #     print("error cannot marching cubes")
             #     return -1
@@ -242,12 +312,26 @@ class TriplaneSDF(pl.LightningModule):
 
     def load_ckpts_own(self,dir):
         print(f'load ckpt from {dir}')
-        ckpts = torch.load(dir)
-        self.triplane_feat.load_state_dict(ckpts['triplane_state_dict'])
-        self.mlp_decoder.load_state_dict(ckpts['decoder_state_dict'])
+        ckpts = torch.load(dir,map_location='cpu')
+
+        self.triplane_feat.load_state_dict(ckpts['triplane_state_dict'],)
+        # self.mlp_decoder.load_state_dict(ckpts['decoder_state_dict'])
 
         self.triplane_feat.cuda()
         self.mlp_decoder.cuda()
+
+
+    def load_decoder(self):
+
+        dir = f"/home/wanhu/workspace/gensdf/outputs/decoder_1.0.pt"
+
+        print(f"load decoder weights from {dir}")
+        ckpts = torch.load(dir,map_location='cpu')
+
+        self.mlp_decoder.load_state_dict(ckpts['decoder_state_dict'])
+        self.triplane_feat.cuda()
+        self.mlp_decoder.cuda()
+    
 
 
 

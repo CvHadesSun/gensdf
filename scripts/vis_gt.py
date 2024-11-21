@@ -13,22 +13,26 @@ def vis_sdf(pts,sdf,out_dir):
 
     colors = sdf @ color
 
+    print(colors.min(),colors.max())
+
     cloud = trimesh.points.PointCloud(pts, colors=colors)
 
     cloud.export(out_dir)
 
 
-data_dir = "/home/wanhu/workspace/gensdf/data/rings_test/000/samples.npy"
+data_dir = "/home/wanhu/workspace/gensdf/data/vehicle/dataset/000/samples.npy"
 data = np.load(data_dir)
 
 pts = data[:,:3]
 
-occ = data[:,3]
+occ = data[:,4]
 
-mask = np.where(occ<0.5)
+# mask = np.where(occ>0.5)
 
-pts_in = pts[mask]
-occ_in = occ[mask]
+# pts_in = pts[mask]
+# occ_in = occ[mask]
+
+
 # sout = torch.from_numpy(data["sample_points_out"])
 # sin = torch.from_numpy(data["sample_points_in"])
 
@@ -51,7 +55,7 @@ occ_in = occ[mask]
 # print(sdf.min(),sdf.max())
 
 
-# vis_sdf(pts_in,occ_in,'out_occ.ply')
+# vis_sdf(pts,occ,'out_sdf.ply')
 
 
 

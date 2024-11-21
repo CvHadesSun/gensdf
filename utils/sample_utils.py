@@ -80,10 +80,10 @@ def generate_volume_dataset(filepath, output_filepath, num_surface, epsilon,norm
     if normalized_mesh:
         normalize_mesh(mesh)
 
-    mesh_surface_points, _ = trimesh.sample.sample_surface(mesh, 10_000_000)
+    mesh_surface_points, _ = trimesh.sample.sample_surface(mesh, 100_000_000)
     kd_tree = KDTree(mesh_surface_points)
 
-    intersector = inside_mesh.MeshIntersector(mesh, 512)
+    intersector = inside_mesh.MeshIntersector(mesh, 2048)
 
     # print("Computing near surface points...")
     surface_points_with_occ= compute_near_surface_points(mesh, intersector, num_surface, epsilon)
@@ -92,12 +92,11 @@ def generate_volume_dataset(filepath, output_filepath, num_surface, epsilon,norm
 
     mask = surface_points_with_occ[:,3]
 
-    outside_mask = np.where(mask<0.5)
+    outside_mask = np.where(mask>0.5)
 
     dist_near[outside_mask] *=-1
 
     near_samples = np.concatenate([surface_points_with_occ, dist_near.reshape(-1,1)], -1)
-
 
     # print("Computing volume points...")
     volume_points_with_occ = compute_volume_points(intersector, num_surface)
@@ -105,7 +104,7 @@ def generate_volume_dataset(filepath, output_filepath, num_surface, epsilon,norm
     dist_vol, _ = kd_tree.query(volume_points, k=1)
 
     mask_vol = volume_points_with_occ[:,3]
-    outside_mask_vol = np.where(mask_vol<0.5)
+    outside_mask_vol = np.where(mask_vol>0.5)
 
     dist_vol[outside_mask_vol] *=-1
     vol_samples = np.concatenate([volume_points_with_occ, dist_vol.reshape(-1,1)], -1)
@@ -138,6 +137,84 @@ def generate_border_occupancy_dataset(filepath, output_filepath, count, wall_thi
     
     dataset = np.concatenate([points, occ], -1)
     # np.save(output_filepath, dataset)
+
+
+
+def sample_from_sdf_field(sdf_file,pts_file,out_dir):
+    
+    pts_occ_sdf = np.load(pts_file)
+    sdf = np.load(sdf_file)
+
+    points = pts_occ_sdf[:,:3] # [-1,1]
+
+    points = (points + 1) / 2.1 # [0,1]
+
+    points = points * 512 # [0,512]
+
+    sdfs=[]
+
+    sdf = sdf.reshape(512,512,512)
+
+    for i in range(points.shape[0]):
+        x,y,z = points[i]
+        x,y,z = int(x),int(y),int(z)
+        sdfs.append(sdf[x,y,z])
+
+    sdfs = np.array(sdfs).reshape(-1)
+
+    pts_occ_sdf[:,-1] = sdfs
+
+    np.save(f"{out_dir}/sample_sdf.npy",pts_occ_sdf)
+
+def get_mgrid(size, dim=3):
+    r'''
+    Example:
+    >>> get_mgrid(3, dim=2)
+        array([[0.0,  0.0],
+                [0.0,  1.0],
+                [0.0,  2.0],
+                [1.0,  0.0],
+                [1.0,  1.0],
+                [1.0,  2.0],
+                [2.0,  0.0],
+                [2.0,  1.0],
+                [2.0,  2.0]], dtype=float32)
+    '''
+    coord = np.arange(0, size, dtype=np.float32)
+    coords = [coord] * dim
+    output = np.meshgrid(*coords, indexing='ij')
+    output = np.stack(output, -1)
+    output = output.reshape(size**dim, dim)
+    return output    # 返回[size**3, 3]的array
+
+def voxel_sample_from_sdf_field(sdf_file,out_dir):
+
+    samples=get_mgrid(512,3)
+
+    sdf = np.load(sdf_file)
+
+    sdfs=[]
+
+    for i in range(samples.shape[0]):
+        x,y,z = samples[i]
+        x,y,z = int(x),int(y),int(z)
+        sdfs.append(sdf[x,y,z])
+
+    
+    samples = samples / 512 * 2 - 1 # [-1,1]
+
+
+    new_data = np.zeros((samples.shape[0],5))
+
+    new_data[:,:3] = samples
+    new_data[:,-1] = np.array(sdfs).reshape(-1)
+
+    np.save(f"{out_dir}/sample_voxel_sdf.npy",new_data)
+
+
+    
+
+
 
 # EPSILON=0.01
 

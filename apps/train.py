@@ -23,7 +23,6 @@ def main(opt):
         **opt.checkpoint,
     )
 
-
     lr_monitor = pl.callbacks.LearningRateMonitor()
 
     pl_logger = TensorBoardLogger("tensorboard", name="default", version=0)
@@ -32,24 +31,36 @@ def main(opt):
 
     model = hydra.utils.instantiate(opt.model, datamodule=datamodule, _recursive_=False)
 
-    trainer = pl.Trainer(devices=1,
+    trainer = pl.Trainer(devices=8,
                          accelerator="gpu",
                          callbacks=[checkpoint_callback, lr_monitor],
                          num_sanity_val_steps=0,  # disable sanity check
                          logger=pl_logger,
+                         strategy="ddp",
+                         **opt.train,
                         #  gradient_clip_val=0.1,
                         #  profiler=pl_profiler,
-                         **opt.train)
+                        )
     
+    restore_ckpt_dir = opt.restore_ckpt
+    checkpoints = sorted(glob.glob(f"{restore_ckpt_dir}/checkpoints/*.pt"))
+    print("Saving configs.")
+    OmegaConf.save(opt, "config.yaml")
 
-    checkpoints = sorted(glob.glob("checkpoints/*.ckpt"))
+
+
+    
     if len(checkpoints) > 0 and opt.resume:
         print("Resume from", checkpoints[-1])
-        trainer.fit(model, ckpt_path=checkpoints[-1])
-    else:
-        print("Saving configs.")
-        OmegaConf.save(opt, "config.yaml")
+        model.load_ckpts_own(checkpoints[-1])
         trainer.fit(model)
+    else:
+        if opt.load_decoder:
+            model.load_decoder()
+        trainer.fit(model)
+
+    # while 1:
+    #     pass
 
 if __name__ == "__main__":
     main()
