@@ -37,9 +37,10 @@ logger.setLevel(logging.DEBUG)
 logger.addHandler(file_handler)
 
 class TriplaneSDF(pl.LightningModule):
-    def __init__(self, opt, datamodule):
+    def __init__(self, opt, datamodule,is_train=True):
         super().__init__()
         self.automatic_optimization = False
+        self.is_train = is_train
 
         self.cfg = opt
         # self.aabb = opt.AABB
@@ -85,8 +86,10 @@ class TriplaneSDF(pl.LightningModule):
         self.mlp_decoder = MLPDecoder(in_channls,latend_dim=self.cfg.deocder.latend_dim,last_op=self.last_op)
 
     def build_model_v2(self):
-        # self.triplane_feat = Triplane(n=self.num_objs,reso=self.cfg.triplane.resolution // (2 ** len(self.cfg.c2f_scale)))
-        self.triplane_feat = Triplane(n=self.num_objs,reso=self.cfg.triplane.resolution)
+        if self.is_train:
+            self.triplane_feat = Triplane(n=self.num_objs,reso=self.cfg.triplane.resolution // (2 ** len(self.cfg.c2f_scale)))
+        else:
+            self.triplane_feat = Triplane(n=self.num_objs,reso=self.cfg.triplane.resolution)
         # in_channls = self.triplane_feat.feature_dim*3 + self.triplane_feat.embedding_channels
         self.mlp_decoder = Network()
 
@@ -125,7 +128,7 @@ class TriplaneSDF(pl.LightningModule):
         return self.optimizer_list, []
     
     def configure_optimizers(self):
-        return self.configure_optimizers_v2()
+        return self.configure_optimizers_v2(net=self.cfg.train_decoder,triplane=self.cfg.train_triplane)
 
 
     def forward(self,obj_idx,xyz):
@@ -258,7 +261,7 @@ class TriplaneSDF(pl.LightningModule):
         if self.current_epoch in c2f_scale:
             new_reso = int(128 / (2 ** (len(c2f_scale) - c2f_scale.index(self.current_epoch) - 1)))
             self.triplane_feat.update_resolution(new_reso)
-            self.configure_optimizers_v2()
+            self.configure_optimizers_v2(net=self.cfg.train_decoder,triplane=self.cfg.train_triplane)
             update_lr(self.optimizer_list[0], self.current_epoch - 1,max_epoch=self.cfg.max_epoch)
             torch.cuda.empty_cache()
 
@@ -338,6 +341,9 @@ class TriplaneSDF(pl.LightningModule):
 
         update_lr(self.optimizer_list[0],self.current_epoch,max_epoch=self.cfg.max_epoch)
 
+        self.loss_it = loss.item()
+
+
         # if self.current_epoch ==600:
         #     vis_model(self.mlp_decoder, self.triplane_feat, 1, '.')
             # save_model(net, triplane, '.')
@@ -362,7 +368,7 @@ class TriplaneSDF(pl.LightningModule):
         在每个 epoch 结束时保存最后一个 step 的 checkpoint
         """
         if self.trainer.is_global_zero and self.current_epoch in self.cfg.save_epochs:
-            save_path = f'checkpoints/model_epoch_{self.current_epoch}.pt'
+            save_path = f'checkpoints/model_epoch_{self.current_epoch}_{self.loss_it:0.4f}.pt'
             os.makedirs("checkpoints", exist_ok=True)
             
             torch.save({
@@ -526,12 +532,12 @@ class TriplaneSDF(pl.LightningModule):
     def load_decoder(self):
 
         # dir = f"/home/wanhu/workspace/gensdf/outputs/decoder_1.0.pt"
-        dir = f"/home/wanhu/workspace/gensdf/outputs/triplane_sdf_100_obj_training_deocder/checkpoints/model_epoch_1000_loss_0.5261.pt"
+        dir = f"/DATA/local4T_0/wanhu/gensdf/decoder/decoder_100_obj.pt"
 
         print(f"load decoder weights from {dir}")
         ckpts = torch.load(dir,map_location='cpu')
 
-        self.mlp_decoder.load_state_dict(ckpts['decoder_state_dict'])
+        self.mlp_decoder.load_state_dict(ckpts)
         # self.triplane_feat.load_state_dict(ckpts['triplane_state_dict'],)
         self.triplane_feat.cuda()
         self.mlp_decoder.cuda()

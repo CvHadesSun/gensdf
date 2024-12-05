@@ -5,7 +5,7 @@ experiment: "triplane_sdf_100_obj_training_deocder"
 # experiment: "triplane_occ_single_objd"
 
 # dataroot: "/home/wanhu/workspace/gensdf/data/rings_1000"
-dataroot: "/home/wanhu/dataset/subfolder_8_100_sample"
+dataroot: ""
 restore_ckpt: "../triplane_sdf_500_debug/"
 # 
 seed: 42
@@ -15,7 +15,7 @@ load_decoder: true # for decoder weights.
 
 train:
   precision: 32
-  max_epochs: 601
+  max_epochs: 701
   check_val_every_n_epoch: 10000
   
 
@@ -80,7 +80,7 @@ model:
     decoder_lr_step: 5000
     decoder_lr_gamma: 0.1
 
-    save_epochs: [300,400,600]
+    save_epochs: [300,400,700]
 
     # fix_mlp_util: 1_000
 

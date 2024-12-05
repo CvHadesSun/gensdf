@@ -20,12 +20,12 @@ def vis_sdf(pts,sdf,out_dir):
     cloud.export(out_dir)
 
 
-data_dir = "/home/wanhu/workspace/gensdf/data/vehicle/dataset/000/samples.npy"
-data = np.load(data_dir)
+# data_dir = "/home/wanhu/workspace/gensdf/data/vehicle/dataset/000/samples.npy"
+# data = np.load(data_dir)
 
-pts = data[:,:3]
+# pts = data[:,:3]
 
-occ = data[:,4]
+# occ = data[:,4]
 
 # mask = np.where(occ>0.5)
 
