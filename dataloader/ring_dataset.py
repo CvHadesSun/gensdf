@@ -223,8 +223,8 @@ class MeshDatasetMultiObjs(torch.utils.data.Dataset):
     
     def _get_data(self,idx):
 
-        num_surf = 10_0000
-        num_vol = 10_0000
+        num_surf = 40_0000
+        num_vol = 20_0000
 
         vol_samples = np.load(f"{self.root}/{self.subjests[idx]}/volume_points.npy") # [xyz,sdf]
         surf_samples = np.load(f"{self.root}/{self.subjests[idx]}/surface_points.npy") # [xyz,sdf,nxyz]

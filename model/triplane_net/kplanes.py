@@ -77,7 +77,11 @@ class Triplane(nn.Module):
             padding_mode="zeros",
             align_corners=True
         )  # [3,C,1,M]
-        feats = feats.permute(0, 3, 2, 1).reshape(3, M, self.C).sum(0)
+        if 0:
+            feats = feats.permute(0, 3, 2, 1).reshape(3, M, self.C).sum(0)
+        else:
+            reshaped_feats = feats.permute(0, 3, 2, 1).reshape(3, M, self.C)
+            feats = reshaped_feats[0] * reshaped_feats[1] * reshaped_feats[2]
         return feats.unsqueeze(0)  # [M,C]
 
     def update_resolution(self, new_reso):

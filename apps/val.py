@@ -28,12 +28,13 @@ def main(opt):
     # ckpts_dir = './checkpoints/model_epoch_1000_loss_0.7850.pt'
     # import ipdb; ipdb.set_trace()
 
-    model = hydra.utils.instantiate(opt.model, datamodule=datamodule, _recursive_=False)
+    model = hydra.utils.instantiate(opt.model, datamodule=datamodule, is_train=False,_recursive_=False)
 
     model.load_ckpts_own(ckpts_dir)
     # model.load_decoder()
 
-    val_obj=[0,1,2,3,4,5,6,7,8,9,20,30,40,50,60]
+    # val_obj=[0,1,2,3,4,5,6,7,8,9,20,30,40,50,60]
+    val_obj=[0]
     for obj in val_obj:
         # obj_idx=torch.Tensor([obj]).cuda().to(torch.int)
 
