@@ -259,7 +259,7 @@ class TriplaneSDF(pl.LightningModule):
         # random_pts = torch.uniform(-1,1,(10_0000,3)).cuda().unsqueeze(0)
         c2f_scale = self.cfg.c2f_scale
         if self.current_epoch in c2f_scale:
-            new_reso = int(128 / (2 ** (len(c2f_scale) - c2f_scale.index(self.current_epoch) - 1)))
+            new_reso = int(self.cfg.triplane.resolution  / (2 ** (len(c2f_scale) - c2f_scale.index(self.current_epoch) - 1)))
             self.triplane_feat.update_resolution(new_reso)
             self.configure_optimizers_v2(net=self.cfg.train_decoder,triplane=self.cfg.train_triplane)
             update_lr(self.optimizer_list[0], self.current_epoch - 1,max_epoch=self.cfg.max_epoch)
@@ -523,7 +523,7 @@ class TriplaneSDF(pl.LightningModule):
         ckpts = torch.load(dir,map_location='cpu')
 
         self.triplane_feat.load_state_dict(ckpts['triplane_state_dict'],)
-        self.mlp_decoder.load_state_dict(ckpts['decoder_state_dict'])
+        # self.mlp_decoder.load_state_dict(ckpts['decoder_state_dict'])
 
         self.triplane_feat.cuda()
         self.mlp_decoder.cuda()

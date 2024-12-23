@@ -1,11 +1,11 @@
 name: "rings_103"
 subject: "00661"
-experiment: "triplane_sdf_100_obj_training_deocder"
+experiment: "/DATA/local4T_1/wanhu_data/vae_dataset/vehicle_sub/triplanes_new/triplane_sdf_1000_0"
 # experiment: "triplane_sdf_single_obj_test_density_sample"
 # experiment: "triplane_occ_single_objd"
 
 # dataroot: "/home/wanhu/workspace/gensdf/data/rings_1000"
-dataroot: ""
+dataroot: "/DATA/local4T_1/wanhu_data/vae_dataset/vehicle_sub/0"
 restore_ckpt: "../triplane_sdf_500_debug/"
 # 
 seed: 42
@@ -15,7 +15,7 @@ load_decoder: true # for decoder weights.
 
 train:
   precision: 32
-  max_epochs: 701
+  max_epochs: 1101
   check_val_every_n_epoch: 10000
   
 
@@ -36,7 +36,7 @@ dataset:
 
     batch_size: 1
 
-    num_objs: 100
+    num_objs: 1001
 
     obj_id: -1
     val_obj_id: 0
@@ -61,7 +61,8 @@ model:
       feature_dim: 32
       embed_dim: 4
     
-    c2f_scale: [101,301,401]
+    # c2f_scale: [101,301,401]
+    c2f_scale: [101,301,501,701,901]
     max_epoch: ${train.max_epochs}
 
     
@@ -80,13 +81,13 @@ model:
     decoder_lr_step: 5000
     decoder_lr_gamma: 0.1
 
-    save_epochs: [300,400,700]
+    save_epochs: [700,900,1100]
 
     # fix_mlp_util: 1_000
 
 
 hydra:
   run:
-    # dir: "/home/wanhu/dataset/sdf_1k/${experiment}"
-    dir: "outputs/${experiment}"
+    dir: "${experiment}"
+    # dir: "outputs/${experiment}"
 

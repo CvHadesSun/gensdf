@@ -31,12 +31,11 @@ def main(opt):
     model = hydra.utils.instantiate(opt.model, datamodule=datamodule,is_train=False, _recursive_=False)
 
     model.load_ckpts_own(ckpts_dir)
-    # model.load_decoder()
+    model.load_decoder()
 
-    val_obj=[0,1,2,3,4,5,6,7,8,9,20,30,40,50,60]
+    val_obj=[0,10,20,40]
     for obj in val_obj:
         # obj_idx=torch.Tensor([obj]).cuda().to(torch.int)
-
         # inference.
         model.test(obj)
 
