@@ -138,3 +138,6 @@ data/rings_test
 data/
 wandb/
 tensorboard/
+
+output/
+output_normals

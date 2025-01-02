@@ -31,3 +31,5 @@ if l >num_f*num:
         save_path = f"{out_dir}/{j}"
         os.makedirs(save_path,exist_ok=True)
         shutil.move(f"{root_dir}/{file}",f"{save_path}/{file}")
+
+
